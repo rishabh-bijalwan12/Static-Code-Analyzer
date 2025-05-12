@@ -1,0 +1,4 @@
+{
+  "watch": ["src/"],
+  "ignore": ["temp_code_*.js"]
+}
