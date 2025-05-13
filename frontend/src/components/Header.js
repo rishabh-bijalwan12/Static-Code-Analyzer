@@ -38,7 +38,7 @@ function Header({ language, setLanguage }) {
           className="bg-transparent text-gray-200 text-lg font-medium focus:outline-none focus:ring-0 cursor-pointer"
         >
           <option value="python" className="bg-gray-800 text-gray-200">Python</option>
-          <option value="js" className="bg-gray-800 text-gray-200">JavaScript</option>
+          <option value="javascript" className="bg-gray-800 text-gray-200">JavaScript</option>
         </select>
       </div>
     </div>

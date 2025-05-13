@@ -13,9 +13,9 @@ function AnalysisJs({ result }) {
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            Syntax Issues
+            Issues
           </h3>
-          <ul className="space-y-2 bg-gray-800/50 p-3 rounded-lg border border-red-500/30">
+          <ul className="space-y-2 bg-gray-800/50 p-3 rounded-lg border border-green-500/30">
             {result.errors.map((err, index) => {
               // Check if err.message has length greater than 0
               if (err.message.length > 0) {
@@ -49,7 +49,7 @@ function AnalysisJs({ result }) {
         </div>
       )}
 
-      {result.security_issues?.length > 0 && (
+      {/* {result.security_issues?.length > 0 && (
         <div className="space-y-3">
           <h3 className="text-lg font-semibold text-yellow-300 flex items-center gap-2">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -70,7 +70,7 @@ function AnalysisJs({ result }) {
             ))}
           </ul>
         </div>
-      )}
+      )} */}
     </div>
   );
 }
