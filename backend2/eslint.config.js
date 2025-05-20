@@ -1,12 +1,14 @@
-// eslint.config.js
 import js from '@eslint/js';
 
 export default [
   js.configs.recommended,
   {
-    files: ['**/*.js', '**/*.jsx', '**/*.ts', '**/*.tsx'],
+    languageOptions: {
+      ecmaVersion: 2020,
+      sourceType: 'module',
+    },
     rules: {
-      // Your custom rules here
+      // your rules here
     },
   },
 ];

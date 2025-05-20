@@ -5,32 +5,35 @@ import subprocess
 import ast
 import tempfile
 import json
+from openai import OpenAI  # Import OpenAI client
 
 app = Flask(__name__)
 CORS(app)  # Allow CORS for all domains
 
+# Initialize OpenAI client
+client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key="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",
+)
+
 def check_syntax_with_ast(code):
     errors = []
     try:
-        # Parse the code into an AST
         ast.parse(code)
     except SyntaxError as e:
-        # If there's a syntax error, add it to the errors list
-        if "unexpected indent" not in str(e):  # Exclude 'unexpected indent' errors
+        if "unexpected indent" not in str(e):
             errors.append({
                 "message": str(e),
                 "line": e.lineno,
                 "column": e.offset
             })
 
-        # Attempt to recover by parsing the code line by line
         lines = code.splitlines()
         for i, line in enumerate(lines):
             try:
                 ast.parse(line)
             except SyntaxError as line_error:
-                if "unexpected indent" not in str(line_error):  # Exclude 'unexpected indent' errors
-                    # Correct the line number in the error message
+                if "unexpected indent" not in str(line_error):
                     errors.append({
                         "message": str(line_error).replace("<unknown>, line 1", f"line {i + 1}"),
                         "line": i + 1,
@@ -63,7 +66,7 @@ def check_with_bandit(code):
             tmp_path = tmp.name
 
         result = subprocess.run(
-            ["python", "-m", "bandit", "-q", "-r", tmp_path],  # Use python -m bandit
+            ["python", "-m", "bandit", "-q", "-r", tmp_path],
             capture_output=True,
             text=True
         )
@@ -79,30 +82,65 @@ def check_with_bandit(code):
         if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
 
+def analyze_code_with_llm(code):
+    prompt = (
+        "You are a highly skilled Python static code analyzer.\n"
+        "Analyze the following Python code for:\n"
+        "- Syntax errors\n"
+        "- Possible runtime errors or bugs\n"
+        "- Code style or best practice improvements\n"
+        "- Security vulnerabilities if any\n"
+        "Provide detailed feedback, explanations, and suggest fixes.\n\n"
+        f"Code to analyze:\n```python\n{code}\n```"
+    )
+    try:
+        completion = client.chat.completions.create(
+            extra_headers={
+                "HTTP-Referer": "<YOUR_SITE_URL>",  # optional
+                "X-Title": "<YOUR_SITE_NAME>",      # optional
+            },
+            model="deepseek/deepseek-prover-v2:free",  # or any other code-analysis capable model
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt,
+                }
+            ],
+            timeout=30  # optional: prevent hanging
+        )
+        return completion.choices[0].message.content
+    except Exception as e:
+        return f"LLM analysis failed: {str(e)}"
+
 @app.route('/analyze_python', methods=['POST'])
 def analyze_python():
     data = request.get_json()
     code = data.get("code", "")
 
     syntax_errors = check_syntax_with_ast(code)
-    print("Syntax Errors:", syntax_errors)
-
     security_issues = check_security_rules(code)
-    print("Security Issues:", security_issues)
 
     bandit_findings = []
     if not syntax_errors:
         bandit_findings = check_with_bandit(code)
-        print("Bandit Findings:", bandit_findings)
 
     result = {
-        "errors": syntax_errors,  # Send all syntax errors in the 'errors' array
-        "security_issues": security_issues,  # Always send security issues
-        "bandit_findings": bandit_findings
+        "errors": syntax_errors,
+        "security_issues": security_issues,
+        "bandit_findings": bandit_findings,
     }
 
-    print("Final Result:", result)
     return jsonify(result)
+
+@app.route('/analyze_python_llm', methods=['POST'])
+def analyze_python_llm():
+    data = request.get_json()
+    code = data.get("code", "")
+
+    llm_analysis = analyze_code_with_llm(code)
+
+    return jsonify({"llm_analysis": llm_analysis})
+
 
 if __name__ == '__main__':
     app.run(port=5000, debug=True)

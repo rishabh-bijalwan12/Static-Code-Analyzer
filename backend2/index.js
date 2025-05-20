@@ -5,123 +5,132 @@ import path from 'path';
 import { exec } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import OpenAI from 'openai';
 
 const app = express();
 const PORT = 5002;
 
+const client = new OpenAI({
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: "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"
+});
 
-const corsOptions = {
-  origin: 'http://localhost:3000', // Your React app's URL
-  methods: ['GET', 'POST'],
-  allowedHeaders: ['Content-Type'],
-};
-
-app.use(cors(corsOptions)); // Apply the specific CORS policy
+// Middleware
+app.use(cors({ origin: 'http://localhost:3000', methods: ['GET', 'POST'], allowedHeaders: ['Content-Type'] }));
 app.use(express.json());
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Utility to create and remove temp files
-function writeTempFile(content, ext) {
-  const fileName = `temp_code_${Date.now()}.${ext}`;
-  const filePath = path.join(__dirname, fileName);
+// Helpers: create & delete temp file
+const writeTempFile = (content, ext) => {
+  const filePath = path.join(__dirname, `temp_${Date.now()}.${ext}`);
   fs.writeFileSync(filePath, content);
   return filePath;
-}
+};
 
-function deleteFile(filePath) {
-  if (fs.existsSync(filePath)) {
-    fs.unlinkSync(filePath);
-  }
-}
+const deleteFile = filePath => fs.existsSync(filePath) && fs.unlinkSync(filePath);
 
-// ESLint (JavaScript Rule-based)
-function runEslint(codePath) {
-  return new Promise((resolve, reject) => {
-    exec(`npx eslint "${codePath}" --format json`, (error, stdout, stderr) => {
-      if (error && !stdout) {
-        return reject(`ESLint error: ${stderr || error.message}`);
-      }
-      try {
-        const result = JSON.parse(stdout);
-        const messages = result[0]?.messages || [];
-        resolve(messages.map(msg => `${msg.line}:${msg.column} ${msg.message} (${msg.ruleId})`));
-      } catch (e) {
-        reject(`Failed to parse ESLint output: ${e.message}`);
-      }
-    });
+// Run ESLint
+const runEslint = filePath => new Promise((resolve, reject) => {
+  exec(`npx eslint "${filePath}" --format json`, (err, stdout) => {
+    if (err && !stdout) return reject(err.message);
+    try {
+      const messages = JSON.parse(stdout)[0]?.messages || [];
+      resolve(messages.map(m => ({
+        line: m.line,
+        column: m.column,
+        message: `${m.message} (${m.ruleId})`
+      })));
+    } catch (e) {
+      reject(`ESLint parsing error: ${e.message}`);
+    }
   });
-}
+});
 
-// JSHint (JavaScript security-ish check)
-function runJshint(codePath) {
-  return new Promise((resolve, reject) => {
-    exec(`npx jshint "${codePath}"`, (error, stdout, stderr) => {
-      if (error && !stdout) {
-        return reject(`JSHint error: ${stderr || error.message}`);
-      }
-      resolve(stdout.trim().split('\n'));
+// Run JSHint
+const runJshint = filePath => new Promise((resolve, reject) => {
+  exec(`npx jshint "${filePath}"`, (err, stdout) => {
+    if (err && !stdout) return reject(err.message);
+    const issues = stdout.trim().split('\n').filter(Boolean);
+    const results = issues.map(line => {
+      const match = line.match(/line (\d+), col (\d+), (.+)/);
+      return match ? {
+        line: parseInt(match[1], 10),
+        column: parseInt(match[2], 10),
+        message: match[3].trim()
+      } : { message: line.trim() };
     });
+    resolve(results);
   });
-}
+});
 
-// POST endpoint for JS analysis
+// Main analysis endpoint
 app.post('/analyze_js', async (req, res) => {
   const { code } = req.body;
-  console.log('Received JavaScript code:', code);
+  if (!code) return res.status(400).json({ error: 'No code provided.' });
 
   const tempFile = writeTempFile(code, 'js');
 
   try {
-    const eslintResults = await runEslint(tempFile);
-    const securityIssues = await runJshint(tempFile);
+    const [eslintResults, jshintResults] = await Promise.all([
+      runEslint(tempFile),
+      runJshint(tempFile)
+    ]);
+    const allErrors = [...eslintResults, ...jshintResults];
+    res.json({ errors: allErrors.length ? allErrors : [] });
 
-    // Parse ESLint results to extract syntax errors and other issues
-    const formattedEslintErrors = eslintResults.map(error => {
-      const match = error.match(/(\d+):(\d+) (.+)/);
-      if (match) {
-        return {
-          line: parseInt(match[1], 10),
-          column: parseInt(match[2], 10),
-          message: match[3].trim(),
-        };
-      }
-      return { message: error.trim() };
-    });
-
-    // Parse JSHint results to extract issues
-    const formattedJshintErrors = securityIssues.map(issue => {
-      const match = issue.match(/line (\d+), col (\d+), (.+)/);
-      if (match) {
-        return {
-          line: parseInt(match[1], 10),
-          column: parseInt(match[2], 10),
-          message: match[3].trim(),
-        };
-      }
-      return { message: issue.trim() };
-    });
-
-    // Combine all errors
-    const allErrors = [...formattedEslintErrors, ...formattedJshintErrors];
-
-    res.json({
-      errors: allErrors.length > 0 ? allErrors : ['No errors found.'],
-    });
   } catch (err) {
-    console.error('Error in JavaScript analysis:', err);
-    res.status(500).json({ error: 'An error occurred during JavaScript analysis.', details: err.message });
+    console.error('Analysis error:', err);
+    res.status(500).json({ error: 'Analysis failed.', details: err.toString() });
   } finally {
     deleteFile(tempFile);
   }
 });
 
+// LLM analysis endpoint
+app.post('/analyze_js_llm', async (req, res) => {
+  const { code } = req.body;
 
-try {
-  app.listen(5002, () => {
-    console.log('Server running on port 5002');
-  });
-} catch (error) {
-  console.error('Error starting server:', error);
-}
+  if (!code || code.trim() === '') {
+    return res.status(400).json({ error: 'Code is required for LLM analysis.' });
+  }
+
+  // Compose the prompt content for the LLM
+  const prompt = `
+You are a highly skilled JavaScript static code analyzer.
+Analyze the following JavaScript code for:
+- Syntax errors
+- Possible runtime errors or bugs
+- Code style or best practice improvements
+- Security vulnerabilities if any
+Provide detailed feedback, explanations, and suggest fixes.
+
+Code to analyze:
+
+${code}
+  `;
+
+  try {
+    const llmCompletion = await client.chat.completions.create({
+      model: "deepseek/deepseek-prover-v2:free",  // use your preferred model
+      messages: [
+        { role: "user", content: prompt }
+      ],
+      timeout: 30
+    });
+
+    const llmResponse = llmCompletion.choices?.[0]?.message?.content || 'No response from LLM.';
+
+    console.log('LLM JS Analysis:\n', llmResponse); 
+    res.json({ llm_analysis: llmResponse });
+  } catch (err) {
+    console.error('LLM Analysis error:', err);
+    res.status(500).json({ error: 'LLM analysis failed.', details: err.toString() });
+  }
+});
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
