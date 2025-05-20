@@ -13,7 +13,7 @@ CORS(app)  # Allow CORS for all domains
 # Initialize OpenAI client
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
-    api_key="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",
+    api_key=os.getenv("api_key")
 )
 
 def check_syntax_with_ast(code):

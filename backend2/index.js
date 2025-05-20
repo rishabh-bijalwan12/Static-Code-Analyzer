@@ -12,8 +12,9 @@ const PORT = 5002;
 
 const client = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
-  apiKey: "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"
+  apiKey: process.env.apiKey,
 });
+
 
 // Middleware
 app.use(cors({ origin: 'http://localhost:3000', methods: ['GET', 'POST'], allowedHeaders: ['Content-Type'] }));
