@@ -6,6 +6,8 @@ import ast
 import tempfile
 import json
 from openai import OpenAI  # Import OpenAI client
+from dotenv import load_dotenv
+load_dotenv()
 
 app = Flask(__name__)
 CORS(app)  # Allow CORS for all domains
@@ -13,7 +15,7 @@ CORS(app)  # Allow CORS for all domains
 # Initialize OpenAI client
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
-    api_key=os.getenv("api_key")
+    api_key=os.getenv("OPENAI_API_KEY")
 )
 
 def check_syntax_with_ast(code):

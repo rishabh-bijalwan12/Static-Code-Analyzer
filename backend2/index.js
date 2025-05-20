@@ -6,19 +6,22 @@ import { exec } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import OpenAI from 'openai';
+import dotenv from 'dotenv';
+dotenv.config();
 
 const app = express();
 const PORT = 5002;
 
-const client = new OpenAI({
-  baseURL: "https://openrouter.ai/api/v1",
-  apiKey: process.env.apiKey,
-});
-
-
 // Middleware
 app.use(cors({ origin: 'http://localhost:3000', methods: ['GET', 'POST'], allowedHeaders: ['Content-Type'] }));
 app.use(express.json());
+
+const client = new OpenAI({
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
